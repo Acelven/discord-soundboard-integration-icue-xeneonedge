@@ -24,7 +24,7 @@ risk.
   connection state with manual join/leave.
 - **Browser page** — the agent serves its own control UI at `/`, so any browser
   on the network is a full soundboard with zero install.
-- **CLI** (`soundctl.py`) — stdlib-only command-line client for scripting and
+- **CLI** (`GoofyBot-discord-test.py`) — stdlib-only command-line client for scripting and
   testing.
 
 ## Features

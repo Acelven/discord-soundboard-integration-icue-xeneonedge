@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<title>'Discord Soundboard'</title>
+		<link rel="icon" type="image/svg+xml" href="resources/icon.svg" />
+
+		<meta name="x-icue-interactive" />
+
+		<meta
+			name="x-icue-property"
+			content="agentUrl"
+			data-label="'Agent URL'"
+			data-type="textfield"
+			data-default="'http://localhost:8766'"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="apiKey"
+			data-label="'API Key (optional)'"
+			data-type="textfield"
+			data-default="''"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="showNames"
+			data-label="'Show sound names'"
+			data-type="switch"
+			data-default="true"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="showDefaults"
+			data-label="'Include default sounds'"
+			data-type="switch"
+			data-default="false"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="allServers"
+			data-label="'Sounds from all servers'"
+			data-type="switch"
+			data-default="true"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="textColor"
+			data-label="'Text Color'"
+			data-type="color"
+			data-default="'#FFFFFF'"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="tileColor"
+			data-label="'Tile Color'"
+			data-type="color"
+			data-default="'#1E2530'"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="bgColor"
+			data-label="'Background Color'"
+			data-type="color"
+			data-default="'#101418'"
+		/>
+
+		<script type="application/json" id="x-icue-groups">
+			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "textColor", "tileColor", "bgColor"] }]
+		</script>
+
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				overflow: hidden;
+				font-family: "Segoe UI", Arial, sans-serif;
+				background: #101418;
+				color: #fff;
+				-webkit-user-select: none;
+				user-select: none;
+				touch-action: manipulation;
+			}
+			* {
+				touch-action: manipulation;
+			}
+			.tile,
+			#topbar,
+			#leave,
+			#tabs .tab,
+			#picker .chan,
+			#picker .close {
+				cursor: pointer;
+			}
+			#topbar {
+				height: 5vh;
+				display: flex;
+				align-items: center;
+				gap: 1vw;
+				padding: 0 1.5vw;
+				font-size: 3vh;
+				opacity: 0.75;
+			}
+			#chan {
+				flex: 1;
+			}
+			#leave {
+				display: none;
+				font-size: 2.6vh;
+				padding: 0.5vh 2vw;
+				border-radius: 999px;
+				background: rgba(240, 62, 62, 0.85);
+				color: #fff;
+				opacity: 1;
+			}
+			#leave.show {
+				display: block;
+			}
+			#dot {
+				width: 2vh;
+				height: 2vh;
+				border-radius: 50%;
+				background: #666;
+			}
+			#dot.on {
+				background: #00d26a;
+			}
+			#dot.off {
+				background: #f03e3e;
+			}
+			#tabs {
+				display: none;
+				height: 6vh;
+				padding: 0 1vw;
+				gap: 1vw;
+				align-items: center;
+				overflow-x: auto;
+				white-space: nowrap;
+			}
+			#tabs .tab {
+				display: inline-block;
+				font-size: 3.2vh;
+				padding: 0.6vh 2vw;
+				border-radius: 999px;
+				background: rgba(255, 255, 255, 0.08);
+				opacity: 0.6;
+			}
+			#tabs .tab.active {
+				background: #5865f2;
+				opacity: 1;
+			}
+			#grid {
+				height: 95vh;
+				display: grid;
+				gap: 0.5vh;
+				padding: 0.5vh;
+				box-sizing: border-box;
+			}
+			.tile {
+				background: #1e2530;
+				border-radius: 8px;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				overflow: hidden;
+				cursor: pointer;
+				transition: background 0.15s ease, transform 0.1s ease;
+			}
+			.tile:active {
+				transform: scale(0.94);
+			}
+			.tile.ok {
+				background: #14532d !important;
+			}
+			.tile.fail {
+				background: #7f1d1d !important;
+			}
+			.tile .emoji {
+				line-height: 1;
+			}
+			.tile .emoji img {
+				display: block;
+				object-fit: contain;
+			}
+			.tile .name {
+				width: 92%;
+				text-align: center;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				opacity: 0.85;
+			}
+			#picker {
+				display: none;
+				position: absolute;
+				top: 5vh;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background: rgba(10, 12, 16, 0.97);
+				overflow-y: auto;
+				padding: 1vh 2vw;
+				z-index: 10;
+			}
+			#picker .ghead {
+				font-size: 3.5vh;
+				opacity: 0.5;
+				margin: 2vh 0 1vh;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+			}
+			#picker .chan {
+				font-size: 5vh;
+				padding: 2vh 2vw;
+				margin-bottom: 1vh;
+				background: #1e2530;
+				border-radius: 8px;
+			}
+			#picker .chan.connected {
+				outline: 2px solid #00d26a;
+			}
+			#picker .close {
+				font-size: 4vh;
+				text-align: center;
+				opacity: 0.5;
+				padding: 2vh;
+			}
+			#msg {
+				height: 95vh;
+				display: none;
+				align-items: center;
+				justify-content: center;
+				font-size: 5vh;
+				opacity: 0.6;
+				text-align: center;
+				padding: 0 4vw;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="dot"></div>
+			<div id="chan">connecting…</div>
+			<div id="leave">leave</div>
+		</div>
+		<div id="tabs"></div>
+		<div id="grid"></div>
+		<div id="msg"></div>
+		<div id="picker"></div>
+
+
+		<script>
+
+			function onTap(el, fn) {
+				var startX = 0, startY = 0, moved = false, lastFire = 0;
+				function begin(x, y) {
+					moved = false; startX = x; startY = y;
+				}
+				function track(x, y) {
+					if (Math.abs(x - startX) > 14 || Math.abs(y - startY) > 14) moved = true;
+				}
+				function fire(e) {
+					if (moved) return;
+					var now = Date.now();
+					if (now - lastFire < 450) return; // dedupe touch+click / pointer+click
+					lastFire = now;
+					fn(e);
+				}
+				// pointer events (preferred, covers mouse + most touch)
+				el.addEventListener("pointerdown", function (e) { begin(e.clientX, e.clientY); });
+				el.addEventListener("pointermove", function (e) { track(e.clientX, e.clientY); });
+				el.addEventListener("pointerup", fire);
+				// raw touch fallback (if pointer events are not delivered)
+				el.addEventListener("touchstart", function (e) {
+					var t = e.changedTouches[0]; begin(t.clientX, t.clientY);
+				});
+				el.addEventListener("touchmove", function (e) {
+					var t = e.changedTouches[0]; track(t.clientX, t.clientY);
+				});
+				el.addEventListener("touchend", fire);
+				// mouse/synthetic click fallback
+				el.addEventListener("click", fire);
+			}
+
+			icueEvents = {
+				onICUEInitialized: start,
+				onDataUpdated: applySettings,
+			};
+
+			var sounds = [];
+			var soundsTimer = null;
+			var statusTimer = null;
+
+			function getProp(name) {
+				try {
+					var v = Function('return typeof ' + name + ' !== "undefined" ? ' + name + ' : undefined')();
+					if (v !== undefined && v !== null && v !== "") return v;
+				} catch (e) {}
+				return undefined;
+			}
+
+			function baseUrl() {
+				var u = getProp("agentUrl") || "http://localhost:8766";
+				return u.replace(/\/+$/, "");
+			}
+
+			function api(path) {
+				var key = getProp("apiKey");
+				return baseUrl() + path + (key ? (path.indexOf("?") >= 0 ? "&" : "?") + "key=" + encodeURIComponent(key) : "");
+			}
+
+			function boolProp(name, dflt) {
+				var v = getProp(name);
+				if (v === undefined) return dflt;
+				return v !== false && v !== "false";
+			}
+
+			function applySettings() {
+				document.body.style.color = getProp("textColor") || "#FFFFFF";
+				document.body.style.background = getProp("bgColor") || "#101418";
+				fetchSounds();
+			}
+
+			function showMsg(text) {
+				var m = document.getElementById("msg");
+				var g = document.getElementById("grid");
+				if (text) {
+					m.textContent = text;
+					m.style.display = "flex";
+					g.style.display = "none";
+				} else {
+					m.style.display = "none";
+					g.style.display = "grid";
+				}
+			}
+
+			// Choose cols/rows that maximize tile size for N tiles in the viewport.
+			function bestLayout(n, w, h) {
+				var best = { cols: 1, rows: n, size: 0 };
+				for (var cols = 1; cols <= n; cols++) {
+					var rows = Math.ceil(n / cols);
+					var size = Math.min(w / cols, h / rows);
+					if (size > best.size) best = { cols: cols, rows: rows, size: size };
+				}
+				return best;
+			}
+
+			var activeTab = null;
+
+			function groupSounds() {
+				var incl = boolProp("showDefaults", false);
+				var groups = {};
+				var order = [];
+				sounds.forEach(function (s) {
+					if (s.default && !incl) return;
+					var key = s.default ? "Discord" : s.guild_name || "Server";
+					if (!groups[key]) {
+						groups[key] = [];
+						order.push(key);
+					}
+					groups[key].push(s);
+				});
+				return { groups: groups, order: order };
+			}
+
+			function render() {
+				var g = groupSounds();
+				var tabsEl = document.getElementById("tabs");
+				var grid = document.getElementById("grid");
+
+				if (!g.order.length) {
+					tabsEl.style.display = "none";
+					grid.style.height = "95vh";
+					showMsg("no sounds — is the agent running and the bot in your server?");
+					return;
+				}
+				showMsg(null);
+
+				if (activeTab === null || g.order.indexOf(activeTab) < 0) activeTab = g.order[0];
+
+				var multi = g.order.length > 1;
+				tabsEl.style.display = multi ? "flex" : "none";
+				grid.style.height = multi ? "89vh" : "95vh";
+				tabsEl.innerHTML = "";
+				if (multi) {
+					g.order.forEach(function (name) {
+						var t = document.createElement("div");
+						t.className = "tab" + (name === activeTab ? " active" : "");
+						t.textContent = name + " (" + g.groups[name].length + ")";
+						onTap(t, function () {
+							activeTab = name;
+							render();
+						});
+						tabsEl.appendChild(t);
+					});
+				}
+
+				renderGrid(g.groups[activeTab] || []);
+			}
+
+			function renderGrid(list) {
+				var grid = document.getElementById("grid");
+				grid.innerHTML = "";
+				if (!list.length) return;
+
+				var w = grid.clientWidth || window.innerWidth;
+				var h = grid.clientHeight || window.innerHeight * 0.89;
+				var showNames = boolProp("showNames", true);
+				var layout = bestLayout(list.length, w, h);
+				grid.style.gridTemplateColumns = "repeat(" + layout.cols + ", 1fr)";
+				grid.style.gridTemplateRows = "repeat(" + layout.rows + ", 1fr)";
+
+				var tileH = h / layout.rows;
+				var emojiSize = Math.floor(tileH * (showNames ? 0.5 : 0.7));
+				var nameSize = Math.max(9, Math.floor(tileH * 0.16));
+				var tileColor = getProp("tileColor") || "#1E2530";
+
+				list.forEach(function (s) {
+					var tile = document.createElement("div");
+					tile.className = "tile";
+					tile.style.background = tileColor;
+
+					var em = document.createElement("div");
+					em.className = "emoji";
+					if (s.emoji_id) {
+						var img = document.createElement("img");
+						img.src = "https://cdn.discordapp.com/emojis/" + s.emoji_id + ".png?size=96";
+						img.style.width = emojiSize + "px";
+						img.style.height = emojiSize + "px";
+						img.onerror = function () {
+							em.textContent = "\uD83D\uDD0A";
+							em.style.fontSize = emojiSize * 0.8 + "px";
+						};
+						em.appendChild(img);
+					} else {
+						em.textContent = s.emoji_name || "\uD83D\uDD0A";
+						em.style.fontSize = emojiSize * 0.8 + "px";
+					}
+					tile.appendChild(em);
+
+					if (showNames) {
+						var nm = document.createElement("div");
+						nm.className = "name";
+						nm.style.fontSize = nameSize + "px";
+						nm.textContent = s.name;
+						tile.appendChild(nm);
+					}
+
+					onTap(tile, function () {
+						play(s, tile);
+					});
+					grid.appendChild(tile);
+				});
+			}
+
+			function flash(tile, cls) {
+				tile.classList.add(cls);
+				setTimeout(function () {
+					tile.classList.remove(cls);
+				}, 500);
+			}
+
+			function play(sound, tile) {
+				// no Content-Type header -> simple request, no CORS preflight
+				fetch(api("/play"), {
+					method: "POST",
+					body: JSON.stringify({ sound_id: sound.sound_id }),
+				})
+					.then(function (r) {
+						flash(tile, r.ok ? "ok" : "fail");
+					})
+					.catch(function () {
+						flash(tile, "fail");
+					});
+			}
+
+			function fetchSounds() {
+				var path = boolProp("allServers", true) ? "/sounds?guild_id=all" : "/sounds";
+				fetch(api(path), { cache: "no-store" })
+					.then(function (r) {
+						return r.json();
+					})
+					.then(function (data) {
+						if (data && data.sounds) {
+							sounds = data.sounds;
+							render();
+						} else {
+							showMsg("agent error: " + ((data && data.error) || "unknown"));
+						}
+					})
+					.catch(function () {
+						showMsg("agent offline: run discord-sound-agent.py");
+					});
+			}
+
+			function fetchStatus() {
+				fetch(api("/status"), { cache: "no-store" })
+					.then(function (r) {
+						return r.json();
+					})
+					.then(function (s) {
+						var dot = document.getElementById("dot");
+						dot.className = s.voice_connected ? "on" : "off";
+						document.getElementById("chan").textContent = s.voice_connected
+							? (s.audio_live === false ? "~ " : "") + (s.guild ? s.guild + " / " : "") + (s.channel || "connected")
+							: "tap to pick a voice channel";
+						document.getElementById("leave").className = s.voice_connected ? "show" : "";
+					})
+					.catch(function (e) {
+						document.getElementById("dot").className = "off";
+						document.getElementById("chan").textContent = "agent offline";
+						document.getElementById("leave").className = "";
+					});
+			}
+
+			function openPicker() {
+				var p = document.getElementById("picker");
+				p.innerHTML = "";
+				p.style.display = "block";
+				fetch(api("/guilds"), { cache: "no-store" })
+					.then(function (r) { return r.json(); })
+					.then(function (data) {
+						(data.guilds || []).forEach(function (g) {
+							var gh = document.createElement("div");
+							gh.className = "ghead";
+							gh.textContent = g.name;
+							p.appendChild(gh);
+							g.channels.forEach(function (c) {
+								var row = document.createElement("div");
+								row.className = "chan" + (c.connected ? " connected" : "");
+								row.textContent = (c.connected ? "\uD83D\uDD0A " : "") + c.name;
+								onTap(row, function () {
+									fetch(api("/join"), { method: "POST", body: JSON.stringify({ channel_id: c.id }) })
+										.then(function () {
+											p.style.display = "none";
+											fetchStatus();
+											fetchSounds();
+										})
+										.catch(function () {});
+								});
+								p.appendChild(row);
+							});
+						});
+						var cl = document.createElement("div");
+						cl.className = "close";
+						cl.textContent = "close";
+						onTap(cl, function () { p.style.display = "none"; });
+						p.appendChild(cl);
+					})
+					.catch(function () {
+						p.innerHTML = "<div class='close'>agent offline</div>";
+						setTimeout(function () { p.style.display = "none"; }, 1500);
+					});
+			}
+
+			onTap(document.getElementById("topbar"), openPicker);
+
+			onTap(document.getElementById("leave"), function () {
+				fetch(api("/leave"), { method: "POST", body: "{}" })
+					.then(function () { fetchStatus(); })
+					.catch(function () {});
+			});
+			// keep a tap on the leave pill from bubbling up to the topbar (which opens the picker)
+			["pointerup", "touchend", "click"].forEach(function (evt) {
+				document.getElementById("leave").addEventListener(evt, function (e) {
+					e.stopPropagation();
+				});
+			});
+
+			function start() {
+				applySettings();
+				fetchStatus();
+				if (soundsTimer) clearInterval(soundsTimer);
+				if (statusTimer) clearInterval(statusTimer);
+				soundsTimer = setInterval(fetchSounds, 60000);
+				statusTimer = setInterval(fetchStatus, 5000);
+			}
+
+			window.addEventListener("resize", render);
+			if (typeof iCUE_initialized !== "undefined" && iCUE_initialized) start();
+		</script>
+	</body>
+</html>
