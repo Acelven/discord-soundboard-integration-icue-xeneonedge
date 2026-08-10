@@ -1,0 +1,14 @@
+services:
+  discord-sound-agent:
+    build: .
+    container_name: DiscordGoofyBot
+    restart: unless-stopped
+    cpuset: "1,2,3,9,10,11"
+    ports:
+      - "8766:8766"
+    environment:
+      - DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN_HERE
+      - API_KEY=YOUR_API_KEY_HERE     # optional but recommended on LAN
+    # - IDLE_TIMEOUT_SEC=14400            # auto-disconnect after inactivity (default 4h)
+    volumes:
+      - /mnt/user/appdata/discord-sound-agent:/data
