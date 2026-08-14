@@ -1,8 +1,8 @@
 # Secrets come from .env in this directory (gitignored) - copy .env.example
-# to .env and fill in real values before running `docker compose up`.
+# to .env and fill in real values before running `docker compose pull/up`.
 services:
   discord-sound-agent:
-    build: .
+    image: ghcr.io/acelven/discord-xeneon-edge-soundboard-integration:latest
     container_name: DiscordGoofyBot
     restart: unless-stopped
     cpuset: "1,2,3,9,10,11"
