@@ -351,6 +351,32 @@ of strings. Servers not present in the saved order (e.g. the bot just joined
 one) are appended at the end automatically — no need to include everything.
 Also returned as `channel_order` in `GET /me`.
 
+### POST /me/discord-id
+
+Links the caller's Discord User ID, used by `POST /me/join-mine` below.
+
+```
+POST /me/discord-id
+{ "discord_user_id": "123456789012345678" }
+```
+
+`200 { "ok": true, "discord_user_id": "123456789012345678" }`. `400` if the
+value isn't purely numeric. Send an empty string to unlink. Also returned as
+`discord_user_id` (`null` if unlinked) in `GET /me`.
+
+### POST /me/join-mine
+
+Finds whichever voice channel the caller's linked Discord account is
+currently in — checked across every guild the bot is in — and joins it, the
+same as a manual `POST /join` with that channel's id. Doesn't require the
+privileged Members intent: it uses the bot's already-enabled `voice_states`
+intent plus a targeted per-user lookup (cache or a single REST fetch), not a
+full member list.
+
+`200 { "ok": true, "channel": "...", "guild": "..." }`. `400` if the caller
+hasn't linked a Discord User ID yet. `404` if the linked account isn't
+currently visible in a voice channel in any guild the bot is in.
+
 ### GET /history
 
 ```

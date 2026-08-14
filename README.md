@@ -124,7 +124,11 @@ dropdown, hit **Join**, and tap sounds. **Leave** disconnects the bot.
 
 Navigate to `http://<host>:8766/dashboard` and sign in. The **☰** menu opens
 the nav drawer (your API key, admin panel, log out); tapping the channel pill
-at the top opens the join/leave picker. Tapping the sounds pill below it opens
+at the top opens the join/leave picker, which also has a **📍 Join my
+channel** button — link your Discord User ID once from the drawer's **My
+Discord Account**, and this brings the bot straight to whatever voice channel
+you're currently sitting in, in any server it's in, no dropdown needed.
+Tapping the sounds pill below it opens
 a picker for which view you're looking at — **All Sounds** gives you an
 overview sectioned by source (Favorites, then Local, then each server), while
 the others (Favorites, Recent, Local, per-server) show a single flat grid.
@@ -182,6 +186,8 @@ JSON in/out. See [`API.md`](API.md) for the full reference.
 | GET/POST/PATCH/DELETE | `/users` | Admin-only user management |
 | GET/POST | `/favorites` | Per-user favorite sounds |
 | POST | `/channel-order` | Save your drag-reordered server section order |
+| POST | `/me/discord-id` | Link your Discord User ID |
+| POST | `/me/join-mine` | Join whatever voice channel your linked Discord account is currently in |
 | GET | `/history`, `/stats/top-sounds` | Play history / most-played |
 | GET | `/config` | Local-sound upload limits |
 | GET/POST/DELETE | `/local-sounds` | Local sound library (upload/list/delete) |
