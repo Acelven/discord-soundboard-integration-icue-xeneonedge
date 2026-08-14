@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Discord Soundboard</title>
+<style>
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:#101418;color:#fff;-webkit-user-select:none;user-select:none}
+#top{display:flex;align-items:center;gap:10px;padding:10px 14px;position:sticky;top:0;background:#101418;z-index:5}
+#dot{width:12px;height:12px;border-radius:50%;background:#666}
+#dot.on{background:#00d26a}#dot.off{background:#f03e3e}
+select,button{font-size:16px;padding:8px 12px;border-radius:8px;border:none;background:#1e2530;color:#fff}
+button{background:#5865f2}
+h3{margin:18px 14px 8px;opacity:.5;text-transform:uppercase;letter-spacing:.1em;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;padding:0 14px}
+.tile{background:#1e2530;border-radius:10px;padding:10px 4px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:background .15s}
+.tile:active{transform:scale(.94)}
+.tile.ok{background:#14532d}.tile.fail{background:#7f1d1d}
+.tile .e{font-size:34px;line-height:1.2;height:40px}
+.tile .e img{width:36px;height:36px;object-fit:contain}
+.tile .n{font-size:12px;opacity:.85;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style></head><body>
+<div id="top"><div id="dot"></div><select id="chan"></select><button id="join">Join</button><button id="leave" style="background:#f03e3e">Leave</button><span id="st"></span></div>
+<div id="content"></div>
+<script>
+const KEY = new URLSearchParams(location.search).get("key") || "";
+const q = p => p + (KEY ? (p.includes("?")?"&":"?") + "key=" + encodeURIComponent(KEY) : "");
+async function guilds(){
+  const d = await (await fetch(q("/guilds"))).json();
+  const sel = document.getElementById("chan"); sel.innerHTML = "";
+  (d.guilds||[]).forEach(g => g.channels.forEach(c => {
+    const o = document.createElement("option");
+    o.value = c.id; o.textContent = g.name + " / " + c.name;
+    if (c.connected) o.selected = true;
+    sel.appendChild(o);
+  }));
+}
+async function status(){
+  try{
+    const s = await (await fetch(q("/status"))).json();
+    document.getElementById("dot").className = s.voice_connected ? "on" : "off";
+    document.getElementById("st").textContent = s.voice_connected ? ((s.audio_live ? "" : "~ ") + s.guild+" / "+s.channel) : "not in voice";
+  }catch(e){ document.getElementById("dot").className = "off"; }
+}
+async function sounds(){
+  const d = await (await fetch(q("/sounds?guild_id=all"))).json();
+  const groups = {}; const order = [];
+  (d.sounds||[]).forEach(s => {
+    if (s.default) return;
+    const k = s.guild_name || "Server";
+    if(!groups[k]){groups[k]=[];order.push(k);}
+    groups[k].push(s);
+  });
+  const c = document.getElementById("content"); c.innerHTML = "";
+  order.forEach(name => {
+    const h = document.createElement("h3"); h.textContent = name; c.appendChild(h);
+    const g = document.createElement("div"); g.className = "grid";
+    groups[name].forEach(s => {
+      const t = document.createElement("div"); t.className = "tile";
+      const e = document.createElement("div"); e.className = "e";
+      if (s.emoji_id){
+        const i = document.createElement("img");
+        i.src = "https://cdn.discordapp.com/emojis/" + s.emoji_id + ".png?size=64";
+        i.onerror = () => { e.textContent = "\uD83D\uDD0A"; };
+        e.appendChild(i);
+      } else e.textContent = s.emoji_name || "\uD83D\uDD0A";
+      const n = document.createElement("div"); n.className = "n"; n.textContent = s.name;
+      t.appendChild(e); t.appendChild(n);
+      t.onclick = async () => {
+        try{
+          const r = await fetch(q("/play"), {method:"POST", body: JSON.stringify({sound_id: s.sound_id})});
+          t.classList.add(r.ok ? "ok" : "fail");
+        }catch(e){ t.classList.add("fail"); }
+        setTimeout(()=>t.classList.remove("ok","fail"), 500);
+      };
+      g.appendChild(t);
+    });
+    c.appendChild(g);
+  });
+}
+document.getElementById("join").onclick = async () => {
+  const id = document.getElementById("chan").value;
+  await fetch(q("/join"), {method:"POST", body: JSON.stringify({channel_id: id})});
+  status(); sounds();
+};
+document.getElementById("leave").onclick = async () => {
+  await fetch(q("/leave"), {method:"POST", body: "{}"});
+  status();
+};
+guilds(); sounds(); status(); setInterval(status, 5000);
+</script></body></html>
