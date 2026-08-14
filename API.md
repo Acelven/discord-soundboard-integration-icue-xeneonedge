@@ -16,20 +16,41 @@ app can drive it over plain HTTP + JSON.
 
 ## Authentication
 
-Optional, controlled by the `API_KEY` environment variable on the agent.
+The endpoints below split into two groups:
 
-- If `API_KEY` is **unset/empty**: no auth required.
-- If `API_KEY` is **set**: every request must include the key as a query
-  parameter `?key=<API_KEY>`. There is no header-based auth.
+- **Legacy routes** (`GET /`, `/status`, `/guilds`, `/sounds`, `POST /join`,
+  `/leave`, `/play`) — auth is optional, controlled by the `API_KEY`
+  environment variable on the agent.
+  - If `API_KEY` is **unset/empty**: no auth required.
+  - If `API_KEY` is **set**: every request must include a key as a query
+    parameter `?key=<key>` — either the shared `API_KEY`, or any user's
+    personal API key (see below). There is no header-based auth.
+- **Dashboard/account routes** (`/auth/*`, `/me`, `/me/apikey/regenerate`,
+  `/users`, `/favorites`, `/history`, `/stats/top-sounds`) — always require
+  an identified user, regardless of whether `API_KEY` is set: either a
+  logged-in session cookie (set by `POST /auth/login`), or `?key=<personal
+  API key>`. The shared `API_KEY` alone does **not** work here since it
+  doesn't identify a user.
 
-A missing or wrong key returns:
+A missing or wrong key/session returns:
 
 ```
 HTTP 401
-{ "error": "bad api key" }
+{ "error": "bad api key" }        // legacy routes
+{ "error": "login required" }     // dashboard/account routes
 ```
 
-The key applies to every endpoint including `GET /`.
+Admin-only routes (`/users`) return `403 { "error": "admin required" }` for a
+non-admin.
+
+### Personal API keys
+
+Every dashboard user has their own API key (`GET /me` → `api_key`), separate
+from the shared `API_KEY`. Requests authenticated with a personal key are
+attributed to that user — history rows, `uploaded_by`, etc. use it — which is
+what scripts/tools like a hotkey client should authenticate with instead of
+the shared key. Regenerate it any time via `POST /me/apikey/regenerate`
+(invalidates the old one immediately).
 
 ---
 
@@ -267,14 +288,195 @@ in any guild's soundboard or the defaults.
 
 ---
 
+## Dashboard & account endpoints
+
+These back the `/dashboard` UI but are plain JSON endpoints usable directly.
+See Authentication above — all of these require an identified user.
+
+### POST /auth/login
+
+```
+POST /auth/login
+{ "username": "bob", "password": "..." }
+```
+
+`200 { "ok": true, "username": "bob", "role": "member" }` and sets a
+signed, httpOnly `session` cookie. `401 { "error": "invalid credentials" }`
+on failure. Sessions last 12h and are invalidated on agent restart (the
+signing secret is generated fresh each process start).
+
+### POST /auth/logout
+
+Clears the session cookie. `200 { "ok": true }`.
+
+### GET /me
+
+Current user's profile. `200 { "username", "role", "api_key", "favorites": [sound_id...] }`.
+
+### POST /me/apikey/regenerate
+
+Rotates the caller's personal API key; the old one stops working immediately.
+`200 { "ok": true, "api_key": "<new key>" }`.
+
+### GET/POST/PATCH/DELETE /users
+
+Admin-only (`403` otherwise).
+
+- `GET /users` → `{ "users": [{ "username", "role", "created_at" }] }`
+  (no password hashes or API keys — those are self-service via `GET /me`).
+- `POST /users` body `{ "username", "password", "role": "admin"|"member" }`
+  → `200 { "ok": true }`, `409` if the username exists.
+- `PATCH /users/{username}` body `{ "password"?, "role"? }` → `200 { "ok": true }`.
+- `DELETE /users/{username}` → `200 { "ok": true }`. `400` if deleting
+  yourself or the last remaining admin.
+
+### GET/POST /favorites
+
+- `GET /favorites` → `{ "favorites": [sound_id...] }` for the caller.
+- `POST /favorites` body `{ "sound_id", "action": "add"|"remove" }` →
+  `{ "ok": true, "favorites": [...] }`.
+
+### POST /channel-order
+
+Saves the caller's drag-reordered server section order (used for both the
+sounds picker and the "All Sounds" sectioning in the dashboard).
+
+```
+POST /channel-order
+{ "order": ["Guild B", "Guild A"] }
+```
+
+`200 { "ok": true, "channel_order": [...] }`. `400` if `order` isn't a list
+of strings. Servers not present in the saved order (e.g. the bot just joined
+one) are appended at the end automatically — no need to include everything.
+Also returned as `channel_order` in `GET /me`.
+
+### GET /history
+
+```
+GET /history?limit=50
+```
+
+Most recent plays first, across all users. Only plays made by an identified
+user (personal API key or session, not the shared `API_KEY`) are logged.
+
+```json
+{ "history": [
+  { "ts": 1734000000.1, "username": "bob", "sound_id": "...", "name": "Airhorn", "guild_name": "Blasted Alliance" }
+] }
+```
+
+Capped at the last 500 plays.
+
+### GET /stats/top-sounds
+
+Most-played sounds, aggregated from history.
+
+```json
+{ "top": [{ "sound_id": "...", "name": "Airhorn", "count": 12 }] }
+```
+
+---
+
+## Local sound library
+
+Sounds that live outside Discord's soundboard entirely: uploaded clips, or
+copies transferred from a Discord sound. Played by streaming directly into
+the bot's voice connection (not Discord's soundboard RPC), so — unlike
+`POST /play` — multiple local sounds can overlap, and playback doesn't
+require the **Use External Sounds** permission. Requires `ffmpeg` in the
+agent's environment (present in the Docker image; a bare `python agent.py`
+run will return clean `500` errors from these endpoints instead).
+
+### GET /config
+
+```json
+{ "max_local_sound_seconds": 15, "max_upload_bytes": 5000000 }
+```
+
+Limits enforced server-side regardless of what a client sends; useful for a
+client-side upload UI to match them.
+
+### GET /local-sounds
+
+```json
+{ "sounds": [
+  { "id": "a1b2c3d4e5f6a7b8", "name": "Airhorn", "emoji": null,
+    "duration_sec": 4.2, "uploaded_by": "bob", "created_at": 1734000000.1,
+    "origin_sound_id": null }
+] }
+```
+
+`origin_sound_id` is set when the entry came from `POST /sounds/{id}/transfer`
+rather than a direct upload.
+
+### POST /local-sounds
+
+Multipart form (not JSON) — the client only supplies where to trim; the
+agent does the actual cut/transcode via `ffmpeg`, never trusting a
+client-side encode.
+
+| Field | Required | Notes |
+|---|---|---|
+| `file` | yes | The original audio file. |
+| `name` | yes | Display name. |
+| `emoji` | no | A single emoji shown on the tile. |
+| `start_sec` | yes | Trim start, in seconds. |
+| `end_sec` | yes | Trim end, in seconds. Must be `> start_sec`. |
+
+`end_sec - start_sec` is capped at `max_local_sound_seconds` server-side, and
+the upload is rejected above `max_upload_bytes`. `200 { "ok": true, "sound": {...} }`
+on success; `400` for a missing name or invalid range, `413` for an
+oversized file, `500` if `ffmpeg` fails or isn't available.
+
+### DELETE /local-sounds/{id}
+
+Removes the entry and its audio file. Allowed for the uploader or an admin;
+`403` otherwise, `404` if the id doesn't exist.
+
+### POST /local-sounds/{id}/play
+
+Streams the clip into the bot's current voice connection, overlapping any
+other local sound already playing. `404` if the id is unknown or its audio
+file is missing; `500` (with a human-readable `error`) if the bot isn't
+connected to voice.
+
+### POST /sounds/{sound_id}/transfer
+
+Copies a Discord soundboard sound's audio into the local library —
+**the original is left untouched on Discord**, this only ever adds a local
+copy. Fetches the audio from Discord's CDN using the bot's own token, then
+transcodes it with `ffmpeg`, capped at `max_local_sound_seconds`.
+
+`200 { "ok": true, "sound": {...} }` with `origin_sound_id` set to
+`sound_id`. `502` if the CDN fetch fails, `500` if the transcode fails.
+
+### GET /local-sounds/{id}/file
+
+Downloads a local sound's raw audio file (`audio/mpeg`, `Content-Disposition:
+attachment`). `404` if the id or its audio file is missing.
+
+### GET /sounds/{sound_id}/download
+
+Downloads a Discord soundboard sound's audio, proxied live from Discord's CDN
+using the bot's own token — unlike `/transfer`, this doesn't persist anything
+server-side, it's a one-off download. `502` if the CDN fetch fails.
+
+---
+
 ## Environment variables (agent side)
 
 | Var | Default | Purpose |
 |---|---|---|
 | `DISCORD_TOKEN` | *(required)* | Bot token. |
 | `PORT` | `8766` | HTTP listen port. Binds `0.0.0.0`. |
-| `API_KEY` | *(empty)* | If set, requires `?key=` on every request. |
+| `API_KEY` | *(empty)* | Shared key; if set, requires `?key=` on legacy routes. |
 | `IDLE_TIMEOUT_SEC` | `14400` | Auto-disconnect after this many seconds with no join/play activity (4h default). |
+| `DATA_DIR` | `/data` | Where `users.json` / `history.jsonl` / `local_sounds/` are stored. |
+| `ADMIN_USERNAME` | `admin` | Bootstrap dashboard admin username (first boot only). |
+| `ADMIN_PASSWORD` | *(random, logged once)* | Bootstrap dashboard admin password (first boot only). |
+| `MAX_LOCAL_SOUND_SECONDS` | `15` | Max length of an uploaded/transferred local sound. |
+| `MAX_UPLOAD_BYTES` | `5000000` | Max upload size for `POST /local-sounds`. |
 
 ---
 
