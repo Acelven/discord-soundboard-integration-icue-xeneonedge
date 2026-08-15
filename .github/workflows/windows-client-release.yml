@@ -1,0 +1,43 @@
+name: Build and release Windows hotkey client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "WindowsHotkeyClient/**"
+      - ".github/workflows/windows-client-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: WindowsHotkeyClient
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Generate icon
+        run: python build_icon.py
+
+      - name: Build exe
+        run: python -m PyInstaller --onefile --windowed --name DiscordSoundboardHotkeys --icon icon.ico hotkey_client.py
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "hotkey-client-v${{ github.run_number }}" `
+            dist/DiscordSoundboardHotkeys.exe `
+            --title "Windows Hotkey Client v${{ github.run_number }}" `
+            --notes "Automated build from commit ${{ github.sha }}."

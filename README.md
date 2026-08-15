@@ -31,6 +31,11 @@ risk.
   working exactly as before.
 - **CLI** (`GoofyBot-discord-test.py`) — stdlib-only command-line client for scripting and
   testing.
+- **Windows hotkey client** (`WindowsHotkeyClient/`) — a system-tray app (no
+  window, right-click for Settings/Exit) that fires sounds from global
+  keyboard shortcuts. Runs directly on Windows, separate from the Docker
+  container. Prebuilt `.exe` releases are published automatically by CI — see
+  [`WindowsHotkeyClient/README.md`](WindowsHotkeyClient/README.md).
 
 ## Features
 
