@@ -3,7 +3,7 @@
   "id": "com.guillermo.discordsoundboard",
   "name": "Discord Soundboard",
   "description": "Tap grid of your Discord soundboard sounds, played into voice via a local bot agent",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "preview_icon": "resources/icon.svg",
   "min_framework_version": "1.0.0",
   "min_app_version": "5.47",

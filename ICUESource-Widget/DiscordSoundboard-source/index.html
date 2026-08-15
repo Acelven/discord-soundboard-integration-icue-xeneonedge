@@ -49,6 +49,22 @@
 
 		<meta
 			name="x-icue-property"
+			content="tabOrder"
+			data-label="'Tab order (comma-separated, e.g. Local, Discord, My Server)'"
+			data-type="textfield"
+			data-default="''"
+		/>
+
+		<meta
+			name="x-icue-property"
+			content="defaultTab"
+			data-label="'Default tab (name of the tab to open on start)'"
+			data-type="textfield"
+			data-default="''"
+		/>
+
+		<meta
+			name="x-icue-property"
 			content="allServers"
 			data-label="'Sounds from all servers'"
 			data-type="switch"
@@ -80,7 +96,7 @@
 		/>
 
 		<script type="application/json" id="x-icue-groups">
-			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "showLocal", "textColor", "tileColor", "bgColor"] }]
+			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "showLocal", "tabOrder", "defaultTab", "textColor", "tileColor", "bgColor"] }]
 		</script>
 
 		<style>
@@ -365,6 +381,36 @@
 
 			var LOCAL_GROUP = "🎵 Local";
 
+			// Strips emoji/punctuation and case so "🎵 Local" / "local" / "Local"
+			// all compare equal - lets tabOrder/defaultTab be typed loosely.
+			function normName(s) {
+				return (s || "").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+			}
+
+			function applyTabOrder(order) {
+				var raw = getProp("tabOrder");
+				if (!raw) {
+					// no explicit order configured - keep old default: Local pinned first
+					if (order.indexOf(LOCAL_GROUP) > 0) {
+						order = order.slice();
+						order.splice(order.indexOf(LOCAL_GROUP), 1);
+						order.unshift(LOCAL_GROUP);
+					}
+					return order;
+				}
+				var wanted = raw.split(",").map(normName).filter(Boolean);
+				var byNorm = {};
+				order.forEach(function (name) { byNorm[normName(name)] = name; });
+				var result = [];
+				wanted.forEach(function (w) {
+					if (byNorm[w] && result.indexOf(byNorm[w]) < 0) result.push(byNorm[w]);
+				});
+				order.forEach(function (name) {
+					if (result.indexOf(name) < 0) result.push(name);
+				});
+				return result;
+			}
+
 			function groupSounds() {
 				var incl = boolProp("showDefaults", false);
 				var groups = {};
@@ -378,11 +424,7 @@
 					}
 					groups[key].push(s);
 				});
-				if (order.indexOf(LOCAL_GROUP) > 0) {
-					order.splice(order.indexOf(LOCAL_GROUP), 1);
-					order.unshift(LOCAL_GROUP);
-				}
-				return { groups: groups, order: order };
+				return { groups: groups, order: applyTabOrder(order) };
 			}
 
 			function render() {
@@ -398,7 +440,11 @@
 				}
 				showMsg(null);
 
-				if (activeTab === null || g.order.indexOf(activeTab) < 0) activeTab = g.order[0];
+				if (activeTab === null || g.order.indexOf(activeTab) < 0) {
+					var pref = normName(getProp("defaultTab"));
+					var match = pref && g.order.filter(function (n) { return normName(n) === pref; })[0];
+					activeTab = match || g.order[0];
+				}
 
 				var multi = g.order.length > 1;
 				tabsEl.style.display = multi ? "flex" : "none";
