@@ -41,6 +41,14 @@
 
 		<meta
 			name="x-icue-property"
+			content="showLocal"
+			data-label="'Include local sounds'"
+			data-type="switch"
+			data-default="true"
+		/>
+
+		<meta
+			name="x-icue-property"
 			content="allServers"
 			data-label="'Sounds from all servers'"
 			data-type="switch"
@@ -72,7 +80,7 @@
 		/>
 
 		<script type="application/json" id="x-icue-groups">
-			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "textColor", "tileColor", "bgColor"] }]
+			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "showLocal", "textColor", "tileColor", "bgColor"] }]
 		</script>
 
 		<style>
@@ -355,19 +363,25 @@
 
 			var activeTab = null;
 
+			var LOCAL_GROUP = "🎵 Local";
+
 			function groupSounds() {
 				var incl = boolProp("showDefaults", false);
 				var groups = {};
 				var order = [];
 				sounds.forEach(function (s) {
 					if (s.default && !incl) return;
-					var key = s.default ? "Discord" : s.guild_name || "Server";
+					var key = s.is_local ? LOCAL_GROUP : s.default ? "Discord" : s.guild_name || "Server";
 					if (!groups[key]) {
 						groups[key] = [];
 						order.push(key);
 					}
 					groups[key].push(s);
 				});
+				if (order.indexOf(LOCAL_GROUP) > 0) {
+					order.splice(order.indexOf(LOCAL_GROUP), 1);
+					order.unshift(LOCAL_GROUP);
+				}
 				return { groups: groups, order: order };
 			}
 
@@ -470,9 +484,10 @@
 
 			function play(sound, tile) {
 				// no Content-Type header -> simple request, no CORS preflight
-				fetch(api("/play"), {
+				var url = sound.is_local ? "/local-sounds/" + sound.local_id + "/play" : "/play";
+				fetch(api(url), {
 					method: "POST",
-					body: JSON.stringify({ sound_id: sound.sound_id }),
+					body: JSON.stringify(sound.is_local ? {} : { sound_id: sound.sound_id }),
 				})
 					.then(function (r) {
 						flash(tile, r.ok ? "ok" : "fail");
@@ -482,15 +497,31 @@
 					});
 			}
 
+			function fetchLocalSounds() {
+				if (!boolProp("showLocal", true)) return Promise.resolve([]);
+				return fetch(api("/local-sounds"), { cache: "no-store" })
+					.then(function (r) { return r.json(); })
+					.then(function (data) {
+						return (data && data.sounds ? data.sounds : []).map(function (s) {
+							return {
+								sound_id: "local:" + s.id, name: s.name, is_local: true, local_id: s.id,
+								emoji_id: null, emoji_name: s.emoji || "🎵",
+							};
+						});
+					})
+					.catch(function () { return []; });
+			}
+
 			function fetchSounds() {
 				var path = boolProp("allServers", true) ? "/sounds?guild_id=all" : "/sounds";
-				fetch(api(path), { cache: "no-store" })
-					.then(function (r) {
-						return r.json();
-					})
-					.then(function (data) {
+				Promise.all([
+					fetch(api(path), { cache: "no-store" }).then(function (r) { return r.json(); }),
+					fetchLocalSounds(),
+				])
+					.then(function (results) {
+						var data = results[0], local = results[1];
 						if (data && data.sounds) {
-							sounds = data.sounds;
+							sounds = data.sounds.concat(local);
 							render();
 						} else {
 							showMsg("agent error: " + ((data && data.error) || "unknown"));

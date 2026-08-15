@@ -23,8 +23,9 @@ risk.
   with its emoji icon, groups sounds by server into tabs, and shows live
   connection state with manual join/leave.
 - **Browser page** — the agent serves its own control UI at `/`, so any browser
-  on the network is a full soundboard with zero install. No login, gated only
-  by the shared `API_KEY` if you set one.
+  on the network is a full soundboard with zero install, including any local
+  sounds uploaded via the dashboard. No login, gated only by the shared
+  `API_KEY` if you set one.
 - **Dashboard** — a login-gated control UI at `/dashboard` with per-user
   accounts, favorites, play history, a local sound library, and an admin
   panel for managing users. Kept separate from `/` so the widget/CLI keep

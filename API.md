@@ -25,12 +25,21 @@ The endpoints below split into two groups:
   - If `API_KEY` is **set**: every request must include a key as a query
     parameter `?key=<key>` — either the shared `API_KEY`, or any user's
     personal API key (see below). There is no header-based auth.
+- **Local-sound read/play routes** (`GET /local-sounds`, `POST
+  /local-sounds/{id}/play`, `GET /local-sounds/{id}/file`) — same as legacy
+  routes: the shared `API_KEY` works here too, in addition to a personal key
+  or session. Plays made with the shared key aren't attributed to a user, so
+  they're silently omitted from `/history`.
 - **Dashboard/account routes** (`/auth/*`, `/me`, `/me/apikey/regenerate`,
   `/users`, `/favorites`, `/history`, `/stats/top-sounds`) — always require
   an identified user, regardless of whether `API_KEY` is set: either a
   logged-in session cookie (set by `POST /auth/login`), or `?key=<personal
   API key>`. The shared `API_KEY` alone does **not** work here since it
   doesn't identify a user.
+- **Local-sound write routes** (`POST /local-sounds`, `DELETE
+  /local-sounds/{id}`, `POST /sounds/{sound_id}/transfer`) — same as
+  dashboard/account routes: need an identified user, since uploads/transfers
+  are attributed via `uploaded_by`. The shared `API_KEY` doesn't work here.
 
 A missing or wrong key/session returns:
 
@@ -425,6 +434,8 @@ client-side upload UI to match them.
 
 ### GET /local-sounds
 
+Honors the shared `API_KEY` (or a personal key/session).
+
 ```json
 { "sounds": [
   { "id": "a1b2c3d4e5f6a7b8", "name": "Airhorn", "emoji": null,
@@ -465,7 +476,9 @@ Removes the entry and its audio file. Allowed for the uploader or an admin;
 Streams the clip into the bot's current voice connection, overlapping any
 other local sound already playing. `404` if the id is unknown or its audio
 file is missing; `500` (with a human-readable `error`) if the bot isn't
-connected to voice.
+connected to voice. Honors the shared `API_KEY` (or a personal key/session);
+plays made with the shared key aren't logged to `/history` since it doesn't
+identify a user.
 
 ### POST /sounds/{sound_id}/transfer
 
@@ -480,7 +493,8 @@ transcodes it with `ffmpeg`, capped at `max_local_sound_seconds`.
 ### GET /local-sounds/{id}/file
 
 Downloads a local sound's raw audio file (`audio/mpeg`, `Content-Disposition:
-attachment`). `404` if the id or its audio file is missing.
+attachment`). `404` if the id or its audio file is missing. Honors the shared
+`API_KEY` (or a personal key/session).
 
 ### GET /sounds/{sound_id}/download
 
