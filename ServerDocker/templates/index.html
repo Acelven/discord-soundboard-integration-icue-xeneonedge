@@ -47,8 +47,24 @@ async function sounds(){
     if (s.default) return;
     const k = s.guild_name || "Server";
     if(!groups[k]){groups[k]=[];order.push(k);}
-    groups[k].push(s);
+    groups[k].push({
+      name: s.name, emoji_id: s.emoji_id, emoji_name: s.emoji_name,
+      playUrl: "/play", playBody: {sound_id: s.sound_id},
+    });
   });
+  let localSounds = [];
+  try{
+    const ld = await (await fetch(q("/local-sounds"))).json();
+    localSounds = ld.sounds || [];
+  }catch(e){}
+  if (localSounds.length){
+    const k = "\uD83C\uDFB5 Local";
+    groups[k] = localSounds.map(s => ({
+      name: s.name, emoji_id: null, emoji_name: s.emoji || "\uD83C\uDFB5",
+      playUrl: "/local-sounds/" + s.id + "/play", playBody: {},
+    }));
+    order.unshift(k);
+  }
   const c = document.getElementById("content"); c.innerHTML = "";
   order.forEach(name => {
     const h = document.createElement("h3"); h.textContent = name; c.appendChild(h);
@@ -66,7 +82,7 @@ async function sounds(){
       t.appendChild(e); t.appendChild(n);
       t.onclick = async () => {
         try{
-          const r = await fetch(q("/play"), {method:"POST", body: JSON.stringify({sound_id: s.sound_id})});
+          const r = await fetch(q(s.playUrl), {method:"POST", body: JSON.stringify(s.playBody)});
           t.classList.add(r.ok ? "ok" : "fail");
         }catch(e){ t.classList.add("fail"); }
         setTimeout(()=>t.classList.remove("ok","fail"), 500);

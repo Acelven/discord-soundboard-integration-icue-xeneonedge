@@ -606,6 +606,22 @@ def require_user(request):
     return None, cors(web.json_response({"error": "login required"}, status=401))
 
 
+def guard_local(request):
+    # Like guard(), but for local-sound read/play routes: accepts the shared
+    # API_KEY (anonymous - request["user"] stays None) in addition to a
+    # personal key or session cookie. Upload/delete/transfer stay on
+    # require_user only, since those need a real username for attribution.
+    key = request.query.get("key")
+    if key and API_KEY and key == API_KEY:
+        request["user"] = None
+        return None
+    username, err = require_user(request)
+    if err:
+        return err
+    request["user"] = username
+    return None
+
+
 def require_admin(request):
     username, err = require_user(request)
     if err:
@@ -846,8 +862,7 @@ def build_app(agent: Agent):
 
     @routes.get("/local-sounds")
     async def list_local_sounds(request):
-        _, err = require_user(request)
-        if err:
+        if (err := guard_local(request)):
             return err
         return cors(web.json_response({"sounds": load_local_sounds()}))
 
@@ -928,8 +943,7 @@ def build_app(agent: Agent):
 
     @routes.get("/local-sounds/{id}/file")
     async def local_sound_file(request):
-        _, err = require_user(request)
-        if err:
+        if (err := guard_local(request)):
             return err
         sid = request.match_info["id"]
         entry = next((s for s in load_local_sounds() if s["id"] == sid), None)
@@ -944,9 +958,9 @@ def build_app(agent: Agent):
 
     @routes.post("/local-sounds/{id}/play")
     async def play_local_sound(request):
-        username, err = require_user(request)
-        if err:
+        if (err := guard_local(request)):
             return err
+        username = request.get("user")
         sid = request.match_info["id"]
         entry = next((s for s in load_local_sounds() if s["id"] == sid), None)
         if not entry:
@@ -958,7 +972,8 @@ def build_app(agent: Agent):
             await agent.play_local(path)
         except Exception as e:
             return cors(web.json_response({"error": str(e)}, status=500))
-        append_history(username, "local:" + sid, entry["name"], None)
+        if username:
+            append_history(username, "local:" + sid, entry["name"], None)
         return cors(web.json_response({"ok": True}))
 
     @routes.post("/sounds/{sound_id}/transfer")
