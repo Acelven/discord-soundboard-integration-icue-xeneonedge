@@ -203,7 +203,7 @@ code{background:var(--bg);border:1px solid var(--border);padding:8px 10px;border
 
 <div class="overlay" id="meOverlay"><div class="panel">
   <h2>My API key</h2>
-  <div class="row"><code id="meKey"></code></div>
+  <div class="row"><code id="meKey"></code><button class="btn ghost" id="copyKey">Copy</button></div>
   <button class="btn ghost" id="regenKey">Regenerate key</button>
   <div class="close" id="closeMe">Close</div>
 </div></div>
@@ -745,6 +745,34 @@ document.getElementById("closeMe").onclick = () => closeOverlay("meOverlay");
 document.getElementById("regenKey").onclick = async () => {
   const d = await (await api("/me/apikey/regenerate", {method:"POST"})).json();
   document.getElementById("meKey").textContent = d.api_key;
+};
+
+async function copyToClipboard(text){
+  if (navigator.clipboard && window.isSecureContext){
+    try{ await navigator.clipboard.writeText(text); return true; }catch(e){}
+  }
+  // Fallback for plain-HTTP LAN origins, where navigator.clipboard isn't
+  // available at all (it requires a secure context - HTTPS or localhost).
+  try{
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  }catch(e){
+    return false;
+  }
+}
+
+document.getElementById("copyKey").onclick = async () => {
+  const btn = document.getElementById("copyKey");
+  const ok = await copyToClipboard(document.getElementById("meKey").textContent);
+  btn.textContent = ok ? "Copied!" : "Copy failed";
+  setTimeout(() => { btn.textContent = "Copy"; }, 1500);
 };
 
 async function loadUsers(){

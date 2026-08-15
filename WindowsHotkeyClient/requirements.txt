@@ -1,0 +1,7 @@
+pystray>=0.19
+pynput>=1.7
+Pillow>=10.0
+
+# Only needed to build a standalone .exe (see "Build as an .exe" in README.md) -
+# not required to just run `python hotkey_client.py` from source.
+pyinstaller>=6.0
