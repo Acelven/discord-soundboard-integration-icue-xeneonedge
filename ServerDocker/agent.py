@@ -427,6 +427,7 @@ class Agent(discord.Client):
                     raise RuntimeError("could not reconnect audio to channel: " + str(e))
         if not vc:
             raise RuntimeError("not connected to a voice channel - pick one first")
+        t0 = time.monotonic()
         if self.mixer is None or not vc.is_playing():
             # add the reader before vc.play() starts the AudioPlayer thread,
             # so its first read() can never see an empty mixer and end the
@@ -436,6 +437,8 @@ class Agent(discord.Client):
             vc.play(self.mixer)
         else:
             self.mixer.add(discord.FFmpegPCMAudio(path))
+        t1 = time.monotonic()
+        print(f"[timing] play_local ffmpeg-spawn+attach={t1-t0:.3f}s")
         self.last_activity = asyncio.get_event_loop().time()
 
     # ---------- sounds ----------
@@ -494,13 +497,20 @@ class Agent(discord.Client):
                     return s
             return None
 
+        t0 = time.monotonic()
         sound = await find()
+        t1 = time.monotonic()
         if sound is None:  # caches may be stale
             sound = await find(force=True)
+        t2 = time.monotonic()
         if sound is None:
             raise RuntimeError("unknown sound_id " + str(sound_id))
         self.last_activity = asyncio.get_event_loop().time()
+        t3 = time.monotonic()
         await vc.channel.send_sound(sound)
+        t4 = time.monotonic()
+        print(f"[timing] play sound_id={sound_id} find1={t1-t0:.3f}s find2(force)={t2-t1:.3f}s "
+              f"send_sound={t4-t3:.3f}s total={t4-t0:.3f}s")
         return sound
 
     async def idle_watchdog(self):
@@ -987,11 +997,14 @@ def build_app(agent: Agent):
 
     @routes.post("/local-sounds/{id}/play")
     async def play_local_sound(request):
+        t0 = time.monotonic()
         if (err := guard_local(request)):
             return err
+        t1 = time.monotonic()
         username = request.get("user")
         sid = request.match_info["id"]
         entry = next((s for s in load_local_sounds() if s["id"] == sid), None)
+        t2 = time.monotonic()
         if not entry:
             return cors(web.json_response({"error": "not found"}, status=404))
         path = local_sound_path(sid)
@@ -1001,8 +1014,12 @@ def build_app(agent: Agent):
             await agent.play_local(path)
         except Exception as e:
             return cors(web.json_response({"error": str(e)}, status=500))
+        t3 = time.monotonic()
         if username:
             await asyncio.to_thread(append_history, username, "local:" + sid, entry["name"], None)
+        t4 = time.monotonic()
+        print(f"[timing] local-play sid={sid} auth={t1-t0:.3f}s lookup={t2-t1:.3f}s "
+              f"play_local={t3-t2:.3f}s history={t4-t3:.3f}s total={t4-t0:.3f}s")
         return cors(web.json_response({"ok": True}))
 
     @routes.post("/sounds/{sound_id}/transfer")
