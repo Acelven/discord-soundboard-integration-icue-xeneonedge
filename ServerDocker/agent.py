@@ -306,6 +306,7 @@ class MixerSource(discord.AudioSource):
             self.readers.append(source)
 
     def read(self):
+        tick_start = time.monotonic()
         with self._lock:
             if not self.readers:
                 return b""
@@ -314,7 +315,10 @@ class MixerSource(discord.AudioSource):
             for r in self.readers:
                 frame = r.read()
                 if not frame:
+                    t0 = time.monotonic()
                     r.cleanup()
+                    dt = time.monotonic() - t0
+                    print(f"[timing] mixer-cleanup dur={dt:.3f}s remaining_readers={len(alive)}")
                     continue
                 if len(frame) < self.FRAME_BYTES:
                     frame = frame + b"\x00" * (self.FRAME_BYTES - len(frame))
@@ -322,6 +326,9 @@ class MixerSource(discord.AudioSource):
                     mix[i] += s
                 alive.append(r)
             self.readers = alive
+            tick_dt = time.monotonic() - tick_start
+            if tick_dt > 0.010:
+                print(f"[timing] mixer-tick-slow dur={tick_dt:.3f}s readers={len(alive)}")
             if not alive:
                 return b""
             return array("h", (max(-32768, min(32767, v)) for v in mix)).tobytes()
