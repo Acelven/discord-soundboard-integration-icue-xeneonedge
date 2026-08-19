@@ -9,6 +9,10 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  # Hardcoded rather than derived from github.repository, which tracks the
+  # repo's current name - a rename would otherwise silently start publishing
+  # to a different, brand-new package instead of the one deployments pull.
+  IMAGE_NAME: acelven/discord-soundboard-integration-icue-xeneonedge
 
 jobs:
   build-and-push:
@@ -18,11 +22,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Compute lowercase image name
-        id: image
-        run: |
-          echo "name=${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -40,7 +39,7 @@ jobs:
           context: ./ServerDocker
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:latest
-            ${{ steps.image.outputs.name }}:v${{ github.run_number }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

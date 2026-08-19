@@ -2,7 +2,7 @@
 # to .env and fill in real values before running `docker compose pull/up`.
 services:
   discord-sound-agent:
-    image: ghcr.io/acelven/discord-xeneon-edge-soundboard-integration:latest
+    image: ghcr.io/acelven/discord-soundboard-integration-icue-xeneonedge:latest
     container_name: DiscordGoofyBot
     restart: unless-stopped
     cpuset: "1,2,3,9,10,11"
