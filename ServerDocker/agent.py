@@ -477,14 +477,18 @@ class Agent(discord.Client):
         home = vc.channel.guild
         search_guilds = [home] + [g for g in self.guilds if g.id != home.id]
 
+        async def fetch_guild_sounds(g, force):
+            try:
+                return await self.guild_sounds(g.id, force=force)
+            except Exception:
+                return []
+
         async def find(force=False):
-            for g in search_guilds:
-                try:
-                    for s in await self.guild_sounds(g.id, force=force):
-                        if str(s.id) == str(sound_id):
-                            return s
-                except Exception:
-                    continue
+            results = await asyncio.gather(*(fetch_guild_sounds(g, force) for g in search_guilds))
+            for sounds in results:
+                for s in sounds:
+                    if str(s.id) == str(sound_id):
+                        return s
             for s in await self.get_defaults():
                 if str(s.id) == str(sound_id):
                     return s
@@ -998,7 +1002,7 @@ def build_app(agent: Agent):
         except Exception as e:
             return cors(web.json_response({"error": str(e)}, status=500))
         if username:
-            append_history(username, "local:" + sid, entry["name"], None)
+            await asyncio.to_thread(append_history, username, "local:" + sid, entry["name"], None)
         return cors(web.json_response({"ok": True}))
 
     @routes.post("/sounds/{sound_id}/transfer")
@@ -1167,7 +1171,8 @@ def build_app(agent: Agent):
             username = request.get("user")
             if username:
                 guild = getattr(sound, "guild", None)
-                append_history(username, str(sound.id), sound.name, guild.name if guild else None)
+                await asyncio.to_thread(append_history, username, str(sound.id), sound.name,
+                                         guild.name if guild else None)
             return cors(web.json_response({"ok": True}))
         except Exception as e:
             return cors(web.json_response({"error": str(e)}, status=500))
