@@ -26,6 +26,7 @@ import hashlib
 import secrets
 import tempfile
 import asyncio
+import threading
 from array import array
 import discord
 import aiohttp
@@ -285,42 +286,54 @@ class MixerSource(discord.AudioSource):
     # playback. Holds zero or more active FFmpegPCMAudio readers and sums
     # their PCM frames each 20ms tick, so local sounds can overlap - unlike
     # discord.py's VoiceClient, which only plays one AudioSource at a time.
+    # read() returns b"" (falsy) only when there are zero readers left to
+    # mix - that's discord.py's AudioSource contract for "this source has
+    # ended," and it's what makes AudioPlayer.stop() run and send the
+    # gateway speaking=False update. A lock guards every access to
+    # `readers` since add() runs on the asyncio thread while read() runs on
+    # discord.py's separate AudioPlayer thread - without it, a sound added
+    # mid-tick could land between read()'s snapshot and its reassignment of
+    # `readers` and get silently dropped, leaking its ffmpeg subprocess.
     FRAME_BYTES = 3840  # 20ms of 48kHz stereo 16-bit PCM
     SAMPLES = FRAME_BYTES // 2
 
     def __init__(self):
         self.readers = []
+        self._lock = threading.Lock()
 
     def add(self, source):
-        self.readers.append(source)
+        with self._lock:
+            self.readers.append(source)
 
     def read(self):
-        if not self.readers:
-            return b"\x00" * self.FRAME_BYTES
-        mix = [0] * self.SAMPLES
-        alive = []
-        for r in self.readers:
-            frame = r.read()
-            if not frame:
-                r.cleanup()
-                continue
-            if len(frame) < self.FRAME_BYTES:
-                frame = frame + b"\x00" * (self.FRAME_BYTES - len(frame))
-            for i, s in enumerate(array("h", frame[:self.FRAME_BYTES])):
-                mix[i] += s
-            alive.append(r)
-        self.readers = alive
-        if not alive:
-            return b"\x00" * self.FRAME_BYTES
-        return array("h", (max(-32768, min(32767, v)) for v in mix)).tobytes()
+        with self._lock:
+            if not self.readers:
+                return b""
+            mix = [0] * self.SAMPLES
+            alive = []
+            for r in self.readers:
+                frame = r.read()
+                if not frame:
+                    r.cleanup()
+                    continue
+                if len(frame) < self.FRAME_BYTES:
+                    frame = frame + b"\x00" * (self.FRAME_BYTES - len(frame))
+                for i, s in enumerate(array("h", frame[:self.FRAME_BYTES])):
+                    mix[i] += s
+                alive.append(r)
+            self.readers = alive
+            if not alive:
+                return b""
+            return array("h", (max(-32768, min(32767, v)) for v in mix)).tobytes()
 
     def is_opus(self):
         return False
 
     def cleanup(self):
-        for r in self.readers:
-            r.cleanup()
-        self.readers = []
+        with self._lock:
+            for r in self.readers:
+                r.cleanup()
+            self.readers = []
 
 
 class Agent(discord.Client):
@@ -332,6 +345,7 @@ class Agent(discord.Client):
         self.idle_timeout = int(os.environ.get("IDLE_TIMEOUT_SEC", str(4 * 3600)))
         self.ghost_channel = None  # (guild_id, channel_id) bot is shown in but has no live audio client
         self.mixer = None  # MixerSource attached to the current voice client, for local sounds
+        self._watchdog_started = False  # on_ready can fire more than once; only start idle_watchdog once
 
     # ---------- voice ----------
 
@@ -414,9 +428,14 @@ class Agent(discord.Client):
         if not vc:
             raise RuntimeError("not connected to a voice channel - pick one first")
         if self.mixer is None or not vc.is_playing():
+            # add the reader before vc.play() starts the AudioPlayer thread,
+            # so its first read() can never see an empty mixer and end the
+            # stream before anything has played
             self.mixer = MixerSource()
+            self.mixer.add(discord.FFmpegPCMAudio(path))
             vc.play(self.mixer)
-        self.mixer.add(discord.FFmpegPCMAudio(path))
+        else:
+            self.mixer.add(discord.FFmpegPCMAudio(path))
         self.last_activity = asyncio.get_event_loop().time()
 
     # ---------- sounds ----------
@@ -518,7 +537,9 @@ class Agent(discord.Client):
             ch = g.get_channel(self.ghost_channel[1]) if g else None
             print(f"Detected existing presence: {g.name if g else '?'} / {ch.name if ch else '?'}")
             self.last_activity = asyncio.get_event_loop().time()
-        self.loop.create_task(self.idle_watchdog())
+        if not self._watchdog_started:
+            self._watchdog_started = True
+            self.loop.create_task(self.idle_watchdog())
 
     async def on_voice_state_update(self, member, before, after):
         # Track our own presence so status stays truthful even without an audio client.
@@ -900,6 +921,10 @@ def build_app(agent: Agent):
             if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
             return cors(web.json_response({"error": str(e)}, status=413))
+        except Exception:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
         if not tmp_path or not name or end_sec is None or end_sec <= start_sec:
             if tmp_path and os.path.exists(tmp_path):

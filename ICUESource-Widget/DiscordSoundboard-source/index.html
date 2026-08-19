@@ -73,6 +73,17 @@
 
 		<meta
 			name="x-icue-property"
+			content="maxTiles"
+			data-label="'Max tiles before scrolling'"
+			data-type="slider"
+			data-min="10"
+			data-max="60"
+			data-step="5"
+			data-default="25"
+		/>
+
+		<meta
+			name="x-icue-property"
 			content="textColor"
 			data-label="'Text Color'"
 			data-type="color"
@@ -96,7 +107,7 @@
 		/>
 
 		<script type="application/json" id="x-icue-groups">
-			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "showNames", "showDefaults", "showLocal", "tabOrder", "defaultTab", "textColor", "tileColor", "bgColor"] }]
+			[{ "title": "'Settings'", "properties": ["agentUrl", "apiKey", "allServers", "maxTiles", "showNames", "showDefaults", "showLocal", "tabOrder", "defaultTab", "textColor", "tileColor", "bgColor"] }]
 		</script>
 
 		<style>
@@ -179,6 +190,17 @@
 			#tabs .tab.active {
 				background: #5865f2;
 				opacity: 1;
+			}
+			#grid.scrolling {
+				overflow-y: auto;
+				overscroll-behavior: contain;
+			}
+			#grid.scrolling::-webkit-scrollbar {
+				width: 4px;
+			}
+			#grid.scrolling::-webkit-scrollbar-thumb {
+				background: rgba(255, 255, 255, 0.25);
+				border-radius: 2px;
 			}
 			#grid {
 				height: 95vh;
@@ -469,16 +491,35 @@
 			function renderGrid(list) {
 				var grid = document.getElementById("grid");
 				grid.innerHTML = "";
+				grid.classList.remove("scrolling");
+				grid.scrollTop = 0;
 				if (!list.length) return;
 
 				var w = grid.clientWidth || window.innerWidth;
 				var h = grid.clientHeight || window.innerHeight * 0.89;
 				var showNames = boolProp("showNames", true);
-				var layout = bestLayout(list.length, w, h);
-				grid.style.gridTemplateColumns = "repeat(" + layout.cols + ", 1fr)";
-				grid.style.gridTemplateRows = "repeat(" + layout.rows + ", 1fr)";
 
-				var tileH = h / layout.rows;
+				var cap = parseInt(getProp("maxTiles"), 10);
+				if (isNaN(cap) || cap < 1) cap = 25;
+
+				var layout, tileH;
+				if (list.length <= cap) {
+					// everything fits: size tiles to fill the viewport exactly
+					layout = bestLayout(list.length, w, h);
+					tileH = h / layout.rows;
+					grid.style.gridTemplateColumns = "repeat(" + layout.cols + ", 1fr)";
+					grid.style.gridTemplateRows = "repeat(" + layout.rows + ", 1fr)";
+					grid.style.gridAutoRows = "";
+				} else {
+					// over the cap: size tiles as if only `cap` were visible,
+					// let the rest flow into extra rows and scroll
+					layout = bestLayout(cap, w, h);
+					tileH = h / layout.rows;
+					grid.style.gridTemplateColumns = "repeat(" + layout.cols + ", 1fr)";
+					grid.style.gridTemplateRows = "";
+					grid.style.gridAutoRows = tileH + "px";
+					grid.classList.add("scrolling");
+				}
 				var emojiSize = Math.floor(tileH * (showNames ? 0.5 : 0.7));
 				var nameSize = Math.max(9, Math.floor(tileH * 0.16));
 				var tileColor = getProp("tileColor") || "#1E2530";
