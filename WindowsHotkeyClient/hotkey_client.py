@@ -73,7 +73,15 @@ def call(base, key, method, path, body=None, query=None, timeout=10):
         q["key"] = key
     url = base.rstrip("/") + path + ("?" + urllib.parse.urlencode(q) if q else "")
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method)
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={
+            "User-Agent": "DiscordSoundboardHotkeys/1.0",
+            "Accept": "application/json",
+        },
+    )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
